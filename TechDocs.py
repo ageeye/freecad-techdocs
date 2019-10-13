@@ -61,13 +61,20 @@ class PresentationPlane:
         obj.Scale = 1.0
 
     def execute(self, obj):
-        import Part
+        import Part, math
         w, h = PresentationPlane.pageSize[obj.PageSize]
-        face = Part.makePlane(w, h, FreeCAD.Vector(w / -2.0, h / -2.0, 0))
+        s = obj.Scale
+        p = obj.Placement
+        face = Part.makePlane(w / s, h / s, FreeCAD.Vector(w / s / -2.0, h / s / -2.0, 0))
+        face.translate(p.Base)
+        face.rotate(p.Base, p.Rotation.Axis, p.Rotation.Angle * 180 /  math.pi )
+        v = FreeCAD.Vector(p.Base.x *-2.0, p.Base.y *-2.0, p.Base.z *-2.0)
         result = []
         for objs in obj.Objects:
             for edge in objs.Shape.Edges:
-                result.append(face.makeParallelProjection(edge, obj.Placement.Rotation.Axis))
+                tmp = face.makeParallelProjection(edge, obj.Placement.Rotation.Axis)
+                tmp.translate(v)
+                result.append(tmp)
 
         obj.Shape = Part.makeCompound(result)
 
@@ -280,11 +287,14 @@ class ViewProviderPresentationPlane(ViewProviderTemplate):
 
     def updateData(self, fp, prop):
         if prop == 'Shape':
+            import Part, math
             pre = self.presentation
             h, w = fp.Proxy.getPageSize(fp)
             s = fp.Scale
+
             points = [[h / -2.0 / s, w / 2.0 / s, 0.0], [h / -2.0 / s, w / -2.0 / s, 0.0],
                       [h / 2.0 / s, w / -2.0 / s, 0.0], [h / 2.0  / s, w / 2.0 / s, 0.0]]
+
             pre.points.setNumPoints(len(points))
             pre.coords.setPoints(points)
             pre.polygon.coordInit()
