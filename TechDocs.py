@@ -55,6 +55,7 @@ class PresentationPlane:
         obj.addProperty('App::PropertyLinkList','Objects','Plane', 'The objects included in this selector.')
         obj.addProperty('App::PropertyEnumeration','PageSize','Plane', 'Choose the size of the page.')
         obj.addProperty('App::PropertyFloat','Scale','Plane', 'Scale factor.')
+        obj.addProperty('App::PropertyLength','Discretize','Plane', 'Discretize length.').Discretize = 2.0
         setup = ['SizeA4Paper','SizeA3Paper']
         obj.PageSize = setup
         obj.PageSize = setup.index(setup[0])
@@ -86,10 +87,25 @@ class PresentationPlane:
         pts = []
         for edg in obj.Shape.Edges:
             if type(edg.Curve) == Part.Line:
-                pts.append([edg.Vertexes[0].X, edg.Vertexes[0].Y, edg.Vertexes[0].Z])
-                pts.append([edg.Vertexes[1].X, edg.Vertexes[1].Y, edg.Vertexes[1].Z])
-
+                pts.append([[edg.Vertexes[0].X, edg.Vertexes[0].Y, edg.Vertexes[0].Z],[edg.Vertexes[1].X, edg.Vertexes[1].Y, edg.Vertexes[1].Z]])
         return pts
+
+    def ArcsToPoints(self, obj):
+        import Part
+        pts = []
+        for edg in obj.Shape.Edges:
+            if type(edg.Curve) == Part.Circle:
+                ptg = []
+                for pt in edg.Curve.discretize(Distance=obj.Discretize,First=edg.FirstParameter,Last=edg.LastParameter):
+                    ptg.append([pt.x, pt.y, pt.z])
+
+                pts.append(ptg)
+        return pts
+
+    def bundlePoints(self, obj):
+        result = self.LinesToPoints(obj)
+        result.extend(self.ArcsToPoints(obj))
+        return result
 
     def __getstate__(self):
         return None
@@ -183,6 +199,10 @@ class CoinPoints(CoinTemplate):
     def setNumPoints(self, num):
         self.__pointset.numPoints.setValue(num)
 
+    def incNumPoints(self, num):
+        n = self.__pointset.numPoints.getValue()
+        self.__pointset.numPoints.setValue(n+num)
+
 class CoinMarkers(CoinTemplate):
 
     def __init__(self, spGrp):
@@ -273,10 +293,11 @@ class ViewProviderPresentationPlane(ViewProviderTemplate):
         self.presentation.points.style({'color': (1.0, 0., 1.0), 'pointSize': 4.0})
         self.presentation.polygon.style({'color': (1.0, 0., 1.0), 'lineWidth': 1.5})
 
+        self.presentation.addCoordinate('pt_coords')
+        self.presentation.addPoints('pt_points')
         self.presentation.addCoordinate('ed_coords')
-        self.presentation.addPoints('ed_points')
         self.presentation.addEdgeSet()
-        self.presentation.ed_points.style(
+        self.presentation.pt_points.style(
              {'color': (1., 1., 1.), 'pointSize': 2.0})
         self.presentation.edgeset.style(
              {'color': (0., 0., 0.), 'lineWidth': 1.0})
@@ -298,23 +319,39 @@ class ViewProviderPresentationPlane(ViewProviderTemplate):
             pre.points.setNumPoints(len(points))
             pre.coords.setPoints(points)
             pre.polygon.coordInit()
+
             for cnt in range(4):
                 pre.polygon.push(cnt, cnt)
 
             pre.polygon.push(4, 0)
             pre.polygon.push(5, -1)
 
-            pts = fp.Proxy.LinesToPoints(fp)
-            pre.ed_points.setNumPoints(len(pts))
+            ptg = fp.Proxy.bundlePoints(fp)
+
+            pts = []
+            for pt in ptg:
+                if len(pt) > 1:
+                    pts.append(pt[0])
+                    pts.append(pt[-1])
+
+            pre.pt_points.setNumPoints(len(pts))
+            pre.pt_coords.setPoints(pts)
+
+            pts = [b for a in ptg for b in a]
             pre.ed_coords.setPoints(pts)
             pre.edgeset.coordInit()
 
             cnt = 0
-            for pt in range(len(pts)):
-                pre.edgeset.push(cnt, pt)
-                cnt += 1
-                if (pt % 2) == 1:
+            ptn = 0
+            for pt in ptg:
+                if len(pt) > 1:
+                    for i in pt:
+                        pre.edgeset.push(cnt, ptn)
+                        cnt += 1
+                        ptn += 1
+
                     pre.edgeset.push(cnt, -1)
                     cnt += 1
+
 
 
