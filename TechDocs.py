@@ -56,6 +56,9 @@ class PresentationPlane:
         obj.addProperty('App::PropertyEnumeration','PageSize','Plane', 'Choose the size of the page.')
         obj.addProperty('App::PropertyFloat','Scale','Plane', 'Scale factor.')
         obj.addProperty('App::PropertyLength','Discretize','Plane', 'Discretize length.').Discretize = 2.0
+        obj.addProperty('App::PropertyFile', 'File', 'Exporter', 'File').File = ''
+        obj.addProperty('App::PropertyEnumeration','Gateway','Exporter', 'Gateway')
+        obj.Gateway = ['PPTX']
         setup = ['SizeA4Paper','SizeA3Paper']
         obj.PageSize = setup
         obj.PageSize = setup.index(setup[0])
@@ -101,6 +104,26 @@ class PresentationPlane:
 
                 pts.append(ptg)
         return pts
+        
+    def exportNow(self, obj):
+        if (obj.Gateway == 'PPTX') and not (obj.File == ''):
+            from pptx.enum.shapes import MSO_CONNECTOR
+            from pptx.util import Mm
+            from pptx import Presentation
+
+            prs = Presentation()
+            title_slide_layout = prs.slide_layouts[0]
+            slide = prs.slides.add_slide(title_slide_layout)
+            title = slide.shapes.title
+            subtitle = slide.placeholders[1]
+
+            w, h = self.getPageSize(obj)
+            w = w / 2
+            h = h / 2
+            for ln in self.LinesToPoints(obj):
+                line1=slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Mm(ln[0][0]+w), Mm((ln[0][1]*-1.0)+h), Mm(ln[1][0]+w), Mm((ln[1][1]*-1.0)+h) )
+
+            prs.save(obj.File)
 
     def bundlePoints(self, obj):
         result = self.LinesToPoints(obj)
@@ -275,8 +298,11 @@ class ViewProviderPresentationPlane(ViewProviderTemplate):
     def attach(self, obj):
         self.Object = obj.Object
 
-    def claimChildren(self):
-        return self.Object.Objects
+#    def claimChildren(self):
+#        return self.Object.Objects
+        
+    def doubleClicked(self, obj):
+        self.Object.Proxy.exportNow(self.Object)
 
     def getDisplayModes(self,obj):
         return ['Presentation']
